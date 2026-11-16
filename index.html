@@ -208,8 +208,10 @@ function applySwipe() {
     basePaneEl.style.clipPath = '';
     return;
   }
-  tilePaneEl.style.clipPath = 'inset(0 ' + (100 - swipePct) + '% 0 0)';   // 左侧留历史图
-  basePaneEl.style.clipPath = 'inset(0 0 0 ' + swipePct + '%)';          // 右侧留底图
+  // 注意：Leaflet 的 pane 是 0x0 的元素，用百分比裁会全裁没，必须按像素
+  const W = map.getSize().x;
+  tilePaneEl.style.clipPath = 'inset(0px ' + Math.round(W * (100 - swipePct) / 100) + 'px 0px 0px)';
+  basePaneEl.style.clipPath = 'inset(0px 0px 0px ' + Math.round(W * swipePct / 100) + 'px)';
   bar.style.left = swipePct + '%';
 }
 
