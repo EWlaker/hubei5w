@@ -1,0 +1,4 @@
+﻿# 4 GB COG：不进仓库（超过 GitHub 单仓建议 1 GB），要发布请放 R2/OSS/Release
+hubei5w_cog.tif
+*.aux.xml
+*.ovr
