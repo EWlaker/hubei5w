@@ -253,6 +253,7 @@ function startDrag(e) {
 }
 function moveDrag(e) {
   if (!dragging) return;
+  if (e.buttons === 0 && !e.touches) { endDrag(); return; }   // 在窗口外松开也要收尾
   const t = e.touches ? e.touches[0] : e;
   if (!t) return;
   setSwipePct(t.clientX);
@@ -275,6 +276,7 @@ window.addEventListener('touchmove', moveDrag, {passive: false});
 window.addEventListener('mouseup', endDrag);
 window.addEventListener('touchend', endDrag);
 window.addEventListener('touchcancel', endDrag);
+window.addEventListener('blur', endDrag);
 bar.addEventListener('mousedown', e => e.stopPropagation());
 
 swipeBox.onchange = () => {
