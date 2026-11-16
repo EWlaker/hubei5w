@@ -203,20 +203,30 @@ let swipePct = 50;
 function applySwipe() {
   const on = swipeBox.checked;
   bar.classList.toggle('on', on);
-  tilePaneEl.style.clipPath = '';
-  basePaneEl.style.clipPath = '';
-  if (!on) {
-    tilePaneEl.style.clip = '';
-    basePaneEl.style.clip = '';
-    return;
-  }
+  const panes = {
+    tile: tilePaneEl,
+    base: basePaneEl,
+    grid: map.getPane('overlayPane'),
+    label: map.getPane('tooltipPane')
+  };
+  Object.values(panes).forEach(el => {
+    if (!el) return;
+    el.style.clipPath = '';
+    if (!on) { el.style.clip = ''; }
+  });
+  if (!on) return;
+
   // 关键：Leaflet 的 pane 是 0x0 的绝对定位元素。
   // 用 clip-path 会把子元素整块裁没（实测 Chromium），老式 clip:rect() 正常。
   const sz = map.getSize();
   const x = Math.round(sz.x * swipePct / 100);
   const H = sz.y + 600;
-  tilePaneEl.style.clip = 'rect(0px, ' + x + 'px, ' + H + 'px, 0px)';
-  basePaneEl.style.clip = 'rect(0px, ' + sz.x + 'px, ' + H + 'px, ' + x + 'px)';
+  const LEFT = 'rect(0px, ' + x + 'px, ' + H + 'px, 0px)';
+  const RIGHT = 'rect(0px, ' + sz.x + 'px, ' + H + 'px, ' + x + 'px)';
+  if (panes.tile) panes.tile.style.clip = LEFT;
+  if (panes.grid) panes.grid.style.clip = LEFT;      // 接合表只在历史图一侧
+  if (panes.label) panes.label.style.clip = LEFT;    // 图名/图号也一样
+  if (panes.base) panes.base.style.clip = RIGHT;
   bar.style.left = swipePct + '%';
 }
 
