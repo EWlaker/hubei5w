@@ -203,15 +203,20 @@ let swipePct = 50;
 function applySwipe() {
   const on = swipeBox.checked;
   bar.classList.toggle('on', on);
+  tilePaneEl.style.clipPath = '';
+  basePaneEl.style.clipPath = '';
   if (!on) {
-    tilePaneEl.style.clipPath = '';
-    basePaneEl.style.clipPath = '';
+    tilePaneEl.style.clip = '';
+    basePaneEl.style.clip = '';
     return;
   }
-  // 注意：Leaflet 的 pane 是 0x0 的元素，用百分比裁会全裁没，必须按像素
-  const W = map.getSize().x;
-  tilePaneEl.style.clipPath = 'inset(0px ' + Math.round(W * (100 - swipePct) / 100) + 'px 0px 0px)';
-  basePaneEl.style.clipPath = 'inset(0px 0px 0px ' + Math.round(W * swipePct / 100) + 'px)';
+  // 关键：Leaflet 的 pane 是 0x0 的绝对定位元素。
+  // 用 clip-path 会把子元素整块裁没（实测 Chromium），老式 clip:rect() 正常。
+  const sz = map.getSize();
+  const x = Math.round(sz.x * swipePct / 100);
+  const H = sz.y + 600;
+  tilePaneEl.style.clip = 'rect(0px, ' + x + 'px, ' + H + 'px, 0px)';
+  basePaneEl.style.clip = 'rect(0px, ' + sz.x + 'px, ' + H + 'px, ' + x + 'px)';
   bar.style.left = swipePct + '%';
 }
 
