@@ -28,14 +28,17 @@
   /* 卷帘 */
   #swipeBar{position:absolute;top:0;bottom:0;width:0;z-index:1200;display:none;pointer-events:none}
   #swipeBar.on{display:block}
+  #swipeBar .hit{position:absolute;top:0;bottom:0;left:-16px;width:32px;pointer-events:auto;
+                 cursor:ew-resize}
   #swipeBar .line{position:absolute;top:0;bottom:0;left:-1px;width:3px;background:#e8b64c;
                   box-shadow:0 0 0 1px rgba(0,0,0,.45),0 0 8px rgba(0,0,0,.5)}
   #swipeBar .knob{position:absolute;top:50%;left:-15px;margin-top:-15px;width:30px;height:30px;
-                  border-radius:50%;background:#e8b64c;border:2px solid #fff;cursor:ew-resize;
-                  pointer-events:auto;box-shadow:0 1px 6px rgba(0,0,0,.5);
+                  border-radius:50%;background:#e8b64c;border:2px solid #fff;
+                  pointer-events:none;box-shadow:0 1px 6px rgba(0,0,0,.5);
                   display:flex;align-items:center;justify-content:center;font-size:13px;color:#3a2a00}
+  #swipeBar.dragging .knob{background:#ffd166;transform:scale(1.12)}
   #swipeBar .tag{position:absolute;top:12px;white-space:nowrap;background:rgba(255,255,255,.9);
-                 border-radius:4px;padding:2px 7px;font-size:12px;color:#333}
+                 border-radius:4px;padding:2px 7px;font-size:12px;color:#333;pointer-events:none}
   #swipeBar .tag.l{left:-96px}
   #swipeBar .tag.r{left:8px}
 </style>
@@ -59,7 +62,7 @@
   <label>透明度 <input type="range" id="opa" min="30" max="100" value="100" style="width:110px;vertical-align:middle"></label>
   <div class="sub" id="tip">放大到 z9 以上显示图名与图号；白框处 = 本批未收该幅</div>
 </div>
-<div id="swipeBar"><div class="line"></div><div class="knob">⇔</div>
+<div id="swipeBar"><div class="hit"></div><div class="line"></div><div class="knob">⇔</div>
   <div class="tag l">历史图</div><div class="tag r">底图</div></div>
 <div id="hint">滚轮缩放 · 拖动平移</div>
 
@@ -237,23 +240,42 @@ function setSwipePct(clientX) {
 }
 
 let dragging = false;
-bar.addEventListener('mousedown', e => {
+
+function startDrag(e) {
+  if (!swipeBox.checked) return;
   dragging = true;
-  e.preventDefault();
+  bar.classList.add('dragging');
+  map.dragging.disable();                 // 拖卷帘时别让地图跟着平移
+  document.body.style.cursor = 'ew-resize';
+  moveDrag(e);
+  if (e.cancelable) e.preventDefault();
   e.stopPropagation();
-});
-window.addEventListener('mousemove', e => {
-  if (dragging) { setSwipePct(e.clientX); e.preventDefault(); }
-});
-window.addEventListener('mouseup', () => { dragging = false; });
-bar.addEventListener('touchstart', e => {
-  dragging = true;
-  e.stopPropagation();
-}, {passive: true});
-window.addEventListener('touchmove', e => {
-  if (dragging && e.touches[0]) { setSwipePct(e.touches[0].clientX); e.preventDefault(); }
-}, {passive: false});
-window.addEventListener('touchend', () => { dragging = false; });
+}
+function moveDrag(e) {
+  if (!dragging) return;
+  const t = e.touches ? e.touches[0] : e;
+  if (!t) return;
+  setSwipePct(t.clientX);
+  if (e.cancelable) e.preventDefault();
+}
+function endDrag() {
+  if (!dragging) return;
+  dragging = false;
+  bar.classList.remove('dragging');
+  map.dragging.enable();
+  document.body.style.cursor = '';
+}
+
+const hit = bar.querySelector('.hit');
+hit.addEventListener('mousedown', startDrag);
+hit.addEventListener('touchstart', startDrag, {passive: false});
+hit.addEventListener('dragstart', e => e.preventDefault());
+window.addEventListener('mousemove', moveDrag);
+window.addEventListener('touchmove', moveDrag, {passive: false});
+window.addEventListener('mouseup', endDrag);
+window.addEventListener('touchend', endDrag);
+window.addEventListener('touchcancel', endDrag);
+bar.addEventListener('mousedown', e => e.stopPropagation());
 
 swipeBox.onchange = () => {
   if (swipeBox.checked) {
