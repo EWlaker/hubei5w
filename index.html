@@ -25,6 +25,19 @@
   .gratlabel{background:transparent;border:0;box-shadow:none;color:#c0392b;font-size:11px;
              font-weight:700;padding:0;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff}
   .gratlabel::before{display:none}
+  /* 卷帘 */
+  #swipeBar{position:absolute;top:0;bottom:0;width:0;z-index:1200;display:none;pointer-events:none}
+  #swipeBar.on{display:block}
+  #swipeBar .line{position:absolute;top:0;bottom:0;left:-1px;width:3px;background:#e8b64c;
+                  box-shadow:0 0 0 1px rgba(0,0,0,.45),0 0 8px rgba(0,0,0,.5)}
+  #swipeBar .knob{position:absolute;top:50%;left:-15px;margin-top:-15px;width:30px;height:30px;
+                  border-radius:50%;background:#e8b64c;border:2px solid #fff;cursor:ew-resize;
+                  pointer-events:auto;box-shadow:0 1px 6px rgba(0,0,0,.5);
+                  display:flex;align-items:center;justify-content:center;font-size:13px;color:#3a2a00}
+  #swipeBar .tag{position:absolute;top:12px;white-space:nowrap;background:rgba(255,255,255,.9);
+                 border-radius:4px;padding:2px 7px;font-size:12px;color:#333}
+  #swipeBar .tag.l{left:-96px}
+  #swipeBar .tag.r{left:8px}
 </style>
 </head>
 <body>
@@ -42,9 +55,12 @@
   </select></label>
   <label><input type="checkbox" id="lyG" checked>图幅接合表（图名 + 图号）</label>
   <label><input type="checkbox" id="lyM" checked>经纬网（15′ / 整度注记）</label>
+  <label><input type="checkbox" id="swipe">卷帘对比（左：历史图 / 右：底图）</label>
   <label>透明度 <input type="range" id="opa" min="30" max="100" value="100" style="width:110px;vertical-align:middle"></label>
   <div class="sub" id="tip">放大到 z9 以上显示图名与图号；白框处 = 本批未收该幅</div>
 </div>
+<div id="swipeBar"><div class="line"></div><div class="knob">⇔</div>
+  <div class="tag l">历史图</div><div class="tag r">底图</div></div>
 <div id="hint">滚轮缩放 · 拖动平移</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -175,6 +191,73 @@ map.on('mousemove', ev => {
   document.getElementById('hint').textContent =
     'N' + p.lat.toFixed(4) + '  E' + p.lon.toFixed(4) + '  ·  z' + map.getZoom();
 });
+
+/* ---------- 卷帘对比 ---------- */
+const bar = document.getElementById('swipeBar');
+const barLine = bar.querySelector('.line');
+const tilePaneEl = map.getPane('tilePane');
+const basePaneEl = map.getPane('basemapPane');
+const swipeBox = document.getElementById('swipe');
+let swipePct = 50;
+
+function applySwipe() {
+  const on = swipeBox.checked;
+  bar.classList.toggle('on', on);
+  if (!on) {
+    tilePaneEl.style.clipPath = '';
+    basePaneEl.style.clipPath = '';
+    return;
+  }
+  tilePaneEl.style.clipPath = 'inset(0 ' + (100 - swipePct) + '% 0 0)';   // 左侧留历史图
+  basePaneEl.style.clipPath = 'inset(0 0 0 ' + swipePct + '%)';          // 右侧留底图
+  bar.style.left = swipePct + '%';
+}
+
+function setSwipePct(clientX) {
+  const r = map.getContainer().getBoundingClientRect();
+  swipePct = Math.min(98, Math.max(2, (clientX - r.left) / r.width * 100));
+  applySwipe();
+}
+
+let dragging = false;
+bar.addEventListener('mousedown', e => {
+  dragging = true;
+  e.preventDefault();
+  e.stopPropagation();
+});
+window.addEventListener('mousemove', e => {
+  if (dragging) { setSwipePct(e.clientX); e.preventDefault(); }
+});
+window.addEventListener('mouseup', () => { dragging = false; });
+bar.addEventListener('touchstart', e => {
+  dragging = true;
+  e.stopPropagation();
+}, {passive: true});
+window.addEventListener('touchmove', e => {
+  if (dragging && e.touches[0]) { setSwipePct(e.touches[0].clientX); e.preventDefault(); }
+}, {passive: false});
+window.addEventListener('touchend', () => { dragging = false; });
+
+swipeBox.onchange = () => {
+  if (swipeBox.checked) {
+    if (document.getElementById('base').value === 'none') setBase('tdt_img');
+    if (map.getPane('basemapPane').children.length === 0) setBase('tdt_img');
+  }
+  applySwipe();
+};
+map.on('resize zoomend moveend', applySwipe);
+
+/* URL 参数：?swipe=1&pos=40 直接进卷帘；?base=tdt_img 指定底图 */
+if (qs.get('swipe') === '1' || qs.get('swipe') === 'true') {
+  swipeBox.checked = true;
+  if (qs.get('pos')) {
+    const v = parseFloat(qs.get('pos'));
+    if (isFinite(v)) swipePct = Math.min(98, Math.max(2, v));
+  }
+  if (document.getElementById('base').value === 'none') setBase('tdt_img');
+  applySwipe();
+}
+
 </script>
 </body>
 </html>
