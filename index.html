@@ -22,6 +22,9 @@
               box-shadow:0 1px 2px rgba(0,0,0,.2);line-height:1.2}
   .sheetlabel .nm{font-weight:700;font-size:11px}
   .sheetlabel .no{color:#a3541f;font-size:10px;letter-spacing:.2px}
+  .gratlabel{background:transparent;border:0;box-shadow:none;color:#c0392b;font-size:11px;
+             font-weight:700;padding:0;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 3px #fff}
+  .gratlabel::before{display:none}
 </style>
 </head>
 <body>
@@ -38,6 +41,7 @@
     <option value="osm">OpenStreetMap</option>
   </select></label>
   <label><input type="checkbox" id="lyG" checked>图幅接合表（图名 + 图号）</label>
+  <label><input type="checkbox" id="lyM" checked>经纬网（15′ / 整度注记）</label>
   <label>透明度 <input type="range" id="opa" min="30" max="100" value="100" style="width:110px;vertical-align:middle"></label>
   <div class="sub" id="tip">放大到 z9 以上显示图名与图号；白框处 = 本批未收该幅</div>
 </div>
@@ -55,6 +59,8 @@ const map = L.map('map', {
 });
 map.createPane('basemapPane');
 map.getPane('basemapPane').style.zIndex = 150;   // 低于 tilePane(200)，历史地图始终压在上面
+map.createPane('gratPane');
+map.getPane('gratPane').style.zIndex = 350;      // 经纬网压在瓦片之上
 
 /* ---------- 底图 ---------- */
 function tdt(layer, key) {
@@ -94,9 +100,6 @@ const tiles = L.tileLayer('xyz_hubei_webp/{z}/{x}/{y}.webp', {
   attribution: '民國地形圖 · 湖北五萬分一 · 397 幅'
 }).addTo(map);
 document.getElementById('opa').oninput = e => tiles.setOpacity(e.target.value / 100);
-tiles.on('tileerror', () => {
-  document.getElementById('tip').textContent = '瓦片加载失败：确认 xyz_hubei_webp 目录在网页同级，且站点已开 http(s)';
-});
 
 /* ---------- 图幅接合表 ---------- */
 const LABEL_MIN_ZOOM = 9;
@@ -125,6 +128,47 @@ function syncGrid() {
 }
 map.on('zoomend', syncGrid);
 document.getElementById('lyG').onchange = syncGrid;
+
+/* ---------- 经纬网 ---------- */
+const GRAT_LABEL_MIN_ZOOM = 7;
+let gratLines = null, gratLabels = null;
+
+fetch('graticule.geojson').then(r => r.json()).then(gj => {
+  gratLines = L.geoJSON(gj, {
+    pane: 'gratPane',
+    filter: f => f.geometry.type === 'LineString',
+    style: f => f.properties.major
+      ? {color: '#c0392b', weight: 1.1, opacity: .85, dashArray: null}
+      : {color: '#e08a7a', weight: .7, opacity: .55, dashArray: '3,4'}
+  });
+  const pts = {type: 'FeatureCollection',
+               features: gj.features.filter(f => f.geometry.type === 'Point')};
+  gratLabels = L.geoJSON(pts, {
+    pane: 'gratPane',
+    pointToLayer: (f, ll) => L.circleMarker(ll, {
+      radius: 0, opacity: 0, fillOpacity: 0, interactive: true}),
+    onEachFeature: (f, ly) => ly.bindTooltip(f.properties.text, {
+      permanent: true, direction: 'center', opacity: 1, className: 'gratlabel'})
+  });
+  syncGrid();          // 触发一次显隐同步
+}).catch(e => { document.getElementById('tip').textContent = '经纬网加载失败: ' + e; });
+
+const lyM = document.getElementById('lyM');
+function syncGrat() {
+  const on = lyM.checked;
+  [gratLines, gratLabels].forEach(l => { if (!l) return; });
+  if (gratLines) {
+    if (on && !map.hasLayer(gratLines)) gratLines.addTo(map);
+    if (!on && map.hasLayer(gratLines)) map.removeLayer(gratLines);
+  }
+  const wantLabels = on && map.getZoom() >= GRAT_LABEL_MIN_ZOOM;
+  if (gratLabels) {
+    if (wantLabels && !map.hasLayer(gratLabels)) gratLabels.addTo(map);
+    if (!wantLabels && map.hasLayer(gratLabels)) map.removeLayer(gratLabels);
+  }
+}
+lyM.onchange = syncGrat;
+map.on('zoomend', syncGrat);
 
 map.on('mousemove', ev => {
   const p = ev.latlng;
