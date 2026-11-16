@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>民國地形圖 · 湖北 五萬分一（397 幅）</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  html,body{margin:0;height:100%;font-family:"Microsoft YaHei",system-ui,sans-serif}
+  #map{position:absolute;inset:0;background:#22262c}
+  .panel{position:absolute;top:12px;left:12px;z-index:1000;background:rgba(255,255,255,.95);
+         border-radius:10px;padding:10px 12px;box-shadow:0 2px 12px rgba(0,0,0,.25);font-size:13px;line-height:1.75}
+  .panel h1{margin:0 0 4px;font-size:15px;font-weight:700}
+  .panel .sub{color:#888;font-size:11px}
+  .panel label{display:flex;align-items:center;gap:6px;cursor:pointer}
+  .panel hr{border:0;border-top:1px solid #e5e5e5;margin:8px 0}
+  .panel select{font-size:12px;padding:2px 4px;border-radius:4px;border:1px solid #ccc;background:#fff}
+  #hint{position:absolute;bottom:12px;left:12px;z-index:1000;background:rgba(255,255,255,.9);
+        border-radius:8px;padding:6px 10px;font-size:12px;color:#555}
+  .sheetlabel{background:rgba(255,255,255,.82);border:1px solid rgba(0,0,0,.2);border-radius:3px;
+              padding:1px 4px;color:#1a1a1a;text-align:center;white-space:nowrap;
+              box-shadow:0 1px 2px rgba(0,0,0,.2);line-height:1.2}
+  .sheetlabel .nm{font-weight:700;font-size:11px}
+  .sheetlabel .no{color:#a3541f;font-size:10px;letter-spacing:.2px}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <h1>民國地形圖 · 湖北 五萬分一</h1>
+  <div class="sub">民國時期地形圖 · 5 萬分一 · <b>397 幅</b><br>XYZ 瓦片 · EPSG:3857 · z5–14（z14 ≈ 8.2 m/px）</div>
+  <hr>
+  <label>底图 <select id="base">
+    <option value="none">无（深色）</option>
+    <option value="tdt_vec">天地图 · 矢量</option>
+    <option value="tdt_img">天地图 · 影像</option>
+    <option value="tdt_ter">天地图 · 地形</option>
+    <option value="osm">OpenStreetMap</option>
+  </select></label>
+  <label><input type="checkbox" id="lyG" checked>图幅接合表（图名 + 图号）</label>
+  <label>透明度 <input type="range" id="opa" min="30" max="100" value="100" style="width:110px;vertical-align:middle"></label>
+  <div class="sub" id="tip">放大到 z9 以上显示图名与图号；白框处 = 本批未收该幅</div>
+</div>
+<div id="hint">滚轮缩放 · 拖动平移</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ===== 天地图 key：到 https://console.tianditu.gov.cn 免费申请后填这里 ===== */
+const TDT_KEY = '4267820f43926eaf808d61dc07269beb';
+
+const qs = new URLSearchParams(location.search);
+const map = L.map('map', {
+  center: [parseFloat(qs.get('lat') || 31.0), parseFloat(qs.get('lon') || 112.5)],
+  zoom: parseInt(qs.get('z') || 7)
+});
+map.createPane('basemapPane');
+map.getPane('basemapPane').style.zIndex = 150;   // 低于 tilePane(200)，历史地图始终压在上面
+
+/* ---------- 底图 ---------- */
+function tdt(layer, key) {
+  return L.tileLayer(
+    'https://t{s}.tianditu.gov.cn/' + key + '/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
+    '&LAYER=' + layer + '&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles' +
+    '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=' + TDT_KEY,
+    {subdomains: '01234567', maxZoom: 18, pane: 'basemapPane', attribution: '© 天地图'});
+}
+const BASEMAPS = {
+  none: null,
+  tdt_vec: () => L.layerGroup([tdt('vec', 'vec_w'), tdt('cva', 'cva_w')]),
+  tdt_img: () => L.layerGroup([tdt('img', 'img_w'), tdt('cia', 'cia_w')]),
+  tdt_ter: () => L.layerGroup([tdt('ter', 'ter_w'), tdt('cta', 'cta_w')]),
+  osm: () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+           {maxZoom: 19, pane: 'basemapPane', attribution: '© OpenStreetMap contributors'})
+};
+
+let baseLayer = null;
+function setBase(kind) {
+  if (baseLayer) { map.removeLayer(baseLayer); baseLayer = null; }
+  if (kind === 'none') return;
+  if (kind.startsWith('tdt') && !TDT_KEY) {
+    document.getElementById('tip').textContent = '没填天地图 key，已临时用 OSM';
+    kind = 'osm';
+  }
+  baseLayer = BASEMAPS[kind]();
+  if (baseLayer) baseLayer.addTo(map);
+  document.getElementById('base').value = kind;
+}
+document.getElementById('base').onchange = e => setBase(e.target.value);
+setBase(qs.get('base') || 'none');
+
+/* ---------- 瓦片 ---------- */
+const tiles = L.tileLayer('xyz_hubei_webp/{z}/{x}/{y}.webp', {
+  minZoom: 5, maxZoom: 14, maxNativeZoom: 14,
+  attribution: '民國地形圖 · 湖北五萬分一 · 397 幅'
+}).addTo(map);
+document.getElementById('opa').oninput = e => tiles.setOpacity(e.target.value / 100);
+tiles.on('tileerror', () => {
+  document.getElementById('tip').textContent = '瓦片加载失败：确认 xyz_hubei_webp 目录在网页同级，且站点已开 http(s)';
+});
+
+/* ---------- 图幅接合表 ---------- */
+const LABEL_MIN_ZOOM = 9;
+let grid = null;
+
+fetch('sheets_index.geojson').then(r => r.json()).then(gj => {
+  grid = L.geoJSON(gj, {
+    style: () => ({color: '#d9a13b', weight: 1, fill: false, opacity: .8}),
+    onEachFeature: (f, ly) => {
+      const p = f.properties;
+      ly.bindTooltip('<span class="nm">' + p.n + '</span><br><span class="no">' +
+                     (p.a || '') + '</span>',
+                     {permanent: true, direction: 'center', opacity: 1, className: 'sheetlabel'});
+      ly.bindPopup('<b>' + p.n + '</b><br>圖號 ' + (p.a || '—') +
+                   '<br><span style="color:#888">行 ' + p['行'] + ' 列 ' + p['列'] + '</span>');
+    }
+  });
+  if (map.getZoom() >= LABEL_MIN_ZOOM) grid.addTo(map);
+}).catch(e => { document.getElementById('tip').textContent = '接合表加载失败: ' + e; });
+
+function syncGrid() {
+  if (!grid) return;
+  const want = document.getElementById('lyG').checked && map.getZoom() >= LABEL_MIN_ZOOM;
+  if (want && !map.hasLayer(grid)) grid.addTo(map);
+  if (!want && map.hasLayer(grid)) map.removeLayer(grid);
+}
+map.on('zoomend', syncGrid);
+document.getElementById('lyG').onchange = syncGrid;
+
+map.on('mousemove', ev => {
+  const p = ev.latlng;
+  document.getElementById('hint').textContent =
+    'N' + p.lat.toFixed(4) + '  E' + p.lon.toFixed(4) + '  ·  z' + map.getZoom();
+});
+</script>
+</body>
+</html>
