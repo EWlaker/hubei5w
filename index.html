@@ -264,12 +264,11 @@ function applySwipe() {
   });
   if (!on) return;
 
-  // Leaflet 的 pane 是 0x0 元素：先给它显式尺寸，再用 clip-path（像素）裁，
-  // 不依赖老式 clip:rect()，跨浏览器/缩放更稳。
+  // Leaflet 的 pane 跟随 .leaflet-map-pane 一起平移（拖动时），
+  // 所以裁剪边界必须按 pane 的"当前屏幕位置"反算，否则拖一次就错位。
   const sz = map.getSize();
-  const x = Math.round(sz.x * swipePct / 100);
-  const left = 'inset(0px ' + (sz.x - x) + 'px 0px 0px)';
-  const right = 'inset(0px 0px 0px ' + x + 'px)';
+  const cRect = map.getContainer().getBoundingClientRect();
+  const boundary = cRect.left + sz.x * swipePct / 100;   // 中轴的屏幕 x
   Object.values(panes).forEach(el => {
     if (!el) return;
     el.style.width = sz.x + 'px';
@@ -277,10 +276,18 @@ function applySwipe() {
     el.style.clip = '';
     el.style.clipPath = '';
   });
-  if (panes.tile) panes.tile.style.clipPath = left;
-  if (panes.grid) panes.grid.style.clipPath = left;
-  if (panes.label) panes.label.style.clipPath = left;
-  if (panes.base) panes.base.style.clipPath = right;
+  const clipFor = (el, keepLeft) => {
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const w = Math.max(0, Math.min(sz.x, boundary - r.left));
+    el.style.clipPath = keepLeft
+      ? 'inset(0px ' + (sz.x - w) + 'px 0px 0px)'
+      : 'inset(0px 0px 0px ' + w + 'px)';
+  };
+  clipFor(panes.tile, true);
+  clipFor(panes.grid, true);
+  clipFor(panes.label, true);
+  clipFor(panes.base, false);
   bar.style.left = swipePct + '%';
 }
 
@@ -339,7 +346,7 @@ swipeBox.onchange = () => {
   setTimeout(applySwipe, 120);
   setTimeout(applySwipe, 400);
 };
-map.on('resize zoomend moveend', applySwipe);
+map.on('resize zoomend moveend move', applySwipe);
 
 /* ===== 调试面板：?debug=1 ===== */
 if (qs.get('debug') === '1') {
@@ -382,6 +389,7 @@ if (qs.get('swipe') === '1' || qs.get('swipe') === 'true') {
 </script>
 </body>
 </html>
+
 
 
 
