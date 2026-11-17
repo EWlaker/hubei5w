@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -47,7 +47,7 @@
 <div id="map"></div>
 <div class="panel">
   <h1>民國地形圖 · 湖北 五萬分一</h1>
-  <div class="sub">民國時期地形圖 · 5 萬分一 · <b>397 幅</b><br>XYZ 瓦片 · EPSG:3857 · z5–14（z14 ≈ 8.2 m/px）</div>
+  <div class="sub">民國時期地形圖 · 5 萬分一 · <b>397 幅</b><br>XYZ 瓦片 · EPSG:3857 · z5–14 全省，z15 仅市驻地（z14 ≈ 8.2 m/px）</div>
   <hr>
   <label>底图 <select id="base">
     <option value="none">无（深色）</option>
@@ -122,10 +122,38 @@ setBase(qs.get('base') || 'none');
 /* ---------- 瓦片 ---------- */
 const TILE_V = 'v3';   // 数据更新时改这个，强制浏览器取新瓦片
 const tiles = L.tileLayer('xyz_hubei_webp/{z}/{x}/{y}.webp?v=' + TILE_V, {
-  minZoom: 5, maxZoom: 17, maxNativeZoom: 14,   // 14 以上为拉伸显示，无新细节
+  minZoom: 5, maxZoom: 16, maxNativeZoom: 14,   // z14 以上为拉伸显示
   attribution: '民國地形圖 · 湖北五萬分一 · 397 幅'
 }).addTo(map);
 document.getElementById('opa').oninput = e => tiles.setOpacity(e.target.value / 100);
+
+/* ---------- z15：只覆盖 17 个市驻地周边 8 km ---------- */
+const CITY_BOX = [[114.2218,30.5209,114.3888,30.6647],[114.9557,30.1277,115.1221,30.2715],[110.713,32.5573,110.8836,32.7011],[111.2029,30.62,111.3701,30.7638],[112.0593,31.9705,112.2289,32.1143],[114.8073,30.3196,114.9739,30.4634],[112.1155,30.9634,112.2833,31.1072],[113.8328,30.8526,114.0004,30.9964],[112.1551,30.255,112.3217,30.3988],[114.7888,30.3817,114.9556,30.5255],[114.2396,29.7694,114.4054,29.9132],[113.2979,31.6185,113.4669,31.7623],[109.4049,30.2002,109.5713,30.344],[113.3706,30.293,113.5372,30.4368],[112.8159,30.3301,112.9825,30.4739],[113.0825,30.5913,113.2495,30.7351],[110.5905,31.6728,110.7595,31.8166]];   // 17 个市驻地周边 8 km 的经纬框
+const BLANK_TILE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+const CityLayer = L.TileLayer.extend({
+  getTileUrl: function (c) {
+    const n = Math.pow(2, c.z);
+    const lonW = c.x / n * 360 - 180, lonE = (c.x + 1) / n * 360 - 180;
+    const latN = Math.atan(Math.sinh(Math.PI * (1 - 2 * c.y / n))) * 180 / Math.PI;
+    const latS = Math.atan(Math.sinh(Math.PI * (1 - 2 * (c.y + 1) / n))) * 180 / Math.PI;
+    for (let i = 0; i < CITY_BOX.length; i++) {
+      const b = CITY_BOX[i];
+      if (lonE > b[0] && lonW < b[2] && latN > b[1] && latS < b[3]) {
+        return 'xyz_city_z15/' + c.z + '/' + c.x + '/' + c.y + '.webp?v=c1';
+      }
+    }
+    return BLANK_TILE;     // 城市范围外不发请求，露出下面拉伸的 z14
+  }
+});
+const cityTiles = new CityLayer('', {minZoom: 15, maxZoom: 16, maxNativeZoom: 15,
+                                     attribution: '城市区 z15'});
+function syncCity() {
+  if (map.getZoom() >= 15) {
+    if (!map.hasLayer(cityTiles)) cityTiles.addTo(map);
+  } else if (map.hasLayer(cityTiles)) {
+    map.removeLayer(cityTiles);
+  }
+}
 
 /* ---------- 图幅接合表 ---------- */
 const LABEL_MIN_ZOOM = 9;
@@ -199,11 +227,13 @@ map.on('zoomend', syncGrat);
 function zoomHint() {
   const z = map.getZoom();
   const tip = document.getElementById('tip');
-  if (z > 14) tip.textContent = 'z' + z + '：已超过 z14，画面是放大插值，没有新细节（原图 5.30 m/px）';
+  if (z >= 15) tip.textContent = 'z' + z + '：仅 17 个市驻地周边 8 km 为 z15 原生，其余为 z14 拉伸';
   else tip.textContent = '放大到 z9 以上显示图名与图号；白框处 = 本批未收该幅';
 }
 map.on('zoomend', zoomHint);
+map.on('zoomend', syncCity);
 zoomHint();
+syncCity();
 map.on('mousemove', ev => {
   const p = ev.latlng;
   document.getElementById('hint').textContent =
