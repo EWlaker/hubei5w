@@ -303,6 +303,33 @@ swipeBox.onchange = () => {
 };
 map.on('resize zoomend moveend', applySwipe);
 
+/* ===== 调试面板：?debug=1 ===== */
+if (qs.get('debug') === '1') {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:absolute;right:8px;top:8px;z-index:99999;background:rgba(0,0,0,.85);' +
+    'color:#0f0;font:12px/1.5 monospace;padding:8px 10px;border-radius:6px;white-space:pre;max-width:46vw';
+  document.body.appendChild(box);
+  setInterval(() => {
+    const sz = map.getSize();
+    const r = map.getContainer().getBoundingClientRect();
+    const panes = ['tilePane', 'basemapPane', 'overlayPane', 'tooltipPane'];
+    const lines = [
+      'win ' + innerWidth + 'x' + innerHeight + '  dpr ' + devicePixelRatio,
+      'mapSize ' + sz.x + 'x' + sz.y + '  rect ' + Math.round(r.left) + ',' + Math.round(r.top) +
+        ' ' + Math.round(r.width) + 'x' + Math.round(r.height),
+      'zoom ' + map.getZoom() + '  swipe ' + (document.getElementById('swipe').checked ? 'on' : 'off') +
+        '  pct ' + Math.round(swipePct)
+    ];
+    panes.forEach(p => {
+      const el = map.getPane(p);
+      if (!el) { lines.push(p + ' -'); return; }
+      const pr = el.getBoundingClientRect();
+      lines.push(p + ' ' + Math.round(pr.width) + 'x' + Math.round(pr.height) +
+        ' @' + Math.round(pr.top) + '  clip=' + (el.style.clipPath || 'none'));
+    });
+    box.textContent = lines.join('\n');
+  }, 800);
+}
 /* URL 参数：?swipe=1&pos=40 直接进卷帘；?base=tdt_img 指定底图 */
 if (qs.get('swipe') === '1' || qs.get('swipe') === 'true') {
   swipeBox.checked = true;
@@ -317,6 +344,7 @@ if (qs.get('swipe') === '1' || qs.get('swipe') === 'true') {
 </script>
 </body>
 </html>
+
 
 
 
