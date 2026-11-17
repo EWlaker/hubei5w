@@ -226,17 +226,23 @@ function applySwipe() {
   });
   if (!on) return;
 
-  // 关键：Leaflet 的 pane 是 0x0 的绝对定位元素。
-  // 用 clip-path 会把子元素整块裁没（实测 Chromium），老式 clip:rect() 正常。
+  // Leaflet 的 pane 是 0x0 元素：先给它显式尺寸，再用 clip-path（像素）裁，
+  // 不依赖老式 clip:rect()，跨浏览器/缩放更稳。
   const sz = map.getSize();
   const x = Math.round(sz.x * swipePct / 100);
-  const H = Math.max(sz.y * 2 + 600, 4000);
-  const LEFT = 'rect(0px, ' + x + 'px, ' + H + 'px, 0px)';
-  const RIGHT = 'rect(0px, ' + sz.x + 'px, ' + H + 'px, ' + x + 'px)';
-  if (panes.tile) panes.tile.style.clip = LEFT;
-  if (panes.grid) panes.grid.style.clip = LEFT;      // 接合表只在历史图一侧
-  if (panes.label) panes.label.style.clip = LEFT;    // 图名/图号也一样
-  if (panes.base) panes.base.style.clip = RIGHT;
+  const left = 'inset(0px ' + (sz.x - x) + 'px 0px 0px)';
+  const right = 'inset(0px 0px 0px ' + x + 'px)';
+  Object.values(panes).forEach(el => {
+    if (!el) return;
+    el.style.width = sz.x + 'px';
+    el.style.height = sz.y + 'px';
+    el.style.clip = '';
+    el.style.clipPath = '';
+  });
+  if (panes.tile) panes.tile.style.clipPath = left;
+  if (panes.grid) panes.grid.style.clipPath = left;
+  if (panes.label) panes.label.style.clipPath = left;
+  if (panes.base) panes.base.style.clipPath = right;
   bar.style.left = swipePct + '%';
 }
 
@@ -311,5 +317,6 @@ if (qs.get('swipe') === '1' || qs.get('swipe') === 'true') {
 </script>
 </body>
 </html>
+
 
 
