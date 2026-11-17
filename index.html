@@ -269,19 +269,23 @@ function applySwipe() {
   const sz = map.getSize();
   const cRect = map.getContainer().getBoundingClientRect();
   const boundary = cRect.left + sz.x * swipePct / 100;   // 中轴的屏幕 x
+  // pane 盒子给足（窗口变小过再变大时，窄盒子会把画面截断），
+  // 但裁剪的右内边距必须按"盒子宽度"算，不能用地图宽度。
+  const BOX_W = Math.max(sz.x, 4096);
+  const BOX_H = Math.max(sz.y, 4096);
   Object.values(panes).forEach(el => {
     if (!el) return;
-    el.style.width = sz.x + 'px';
-    el.style.height = sz.y + 'px';
+    el.style.width = BOX_W + 'px';
+    el.style.height = BOX_H + 'px';
     el.style.clip = '';
     el.style.clipPath = '';
   });
   const clipFor = (el, keepLeft) => {
     if (!el) return;
     const r = el.getBoundingClientRect();
-    const w = Math.max(0, Math.min(sz.x, boundary - r.left));
+    const w = Math.max(0, Math.min(BOX_W, boundary - r.left));
     el.style.clipPath = keepLeft
-      ? 'inset(0px ' + (sz.x - w) + 'px 0px 0px)'
+      ? 'inset(0px ' + (BOX_W - w) + 'px 0px 0px)'
       : 'inset(0px 0px 0px ' + w + 'px)';
   };
   clipFor(panes.tile, true);
@@ -347,6 +351,8 @@ swipeBox.onchange = () => {
   setTimeout(applySwipe, 400);
 };
 map.on('resize zoomend moveend move', applySwipe);
+window.addEventListener('resize', () => { map.invalidateSize(); applySwipe(); });
+setInterval(() => { if (swipeBox.checked) applySwipe(); }, 500);
 
 /* ===== 调试面板：?debug=1 ===== */
 if (qs.get('debug') === '1') {
@@ -389,6 +395,7 @@ if (qs.get('swipe') === '1' || qs.get('swipe') === 'true') {
 </script>
 </body>
 </html>
+
 
 
 
