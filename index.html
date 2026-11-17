@@ -122,7 +122,7 @@ setBase(qs.get('base') || 'none');
 /* ---------- 瓦片 ---------- */
 const TILE_V = 'v3';   // 数据更新时改这个，强制浏览器取新瓦片
 const tiles = L.tileLayer('xyz_hubei_webp/{z}/{x}/{y}.webp?v=' + TILE_V, {
-  minZoom: 5, maxZoom: 14, maxNativeZoom: 14,
+  minZoom: 5, maxZoom: 17, maxNativeZoom: 14,   // 14 以上为拉伸显示，无新细节
   attribution: '民國地形圖 · 湖北五萬分一 · 397 幅'
 }).addTo(map);
 document.getElementById('opa').oninput = e => tiles.setOpacity(e.target.value / 100);
@@ -196,6 +196,14 @@ function syncGrat() {
 lyM.onchange = syncGrat;
 map.on('zoomend', syncGrat);
 
+function zoomHint() {
+  const z = map.getZoom();
+  const tip = document.getElementById('tip');
+  if (z > 14) tip.textContent = 'z' + z + '：已超过 z14，画面是放大插值，没有新细节（原图 5.30 m/px）';
+  else tip.textContent = '放大到 z9 以上显示图名与图号；白框处 = 本批未收该幅';
+}
+map.on('zoomend', zoomHint);
+zoomHint();
 map.on('mousemove', ev => {
   const p = ev.latlng;
   document.getElementById('hint').textContent =
@@ -344,6 +352,9 @@ if (qs.get('swipe') === '1' || qs.get('swipe') === 'true') {
 </script>
 </body>
 </html>
+
+
+
 
 
 
