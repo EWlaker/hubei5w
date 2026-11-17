@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -110,11 +110,18 @@ function setBase(kind) {
   if (baseLayer) baseLayer.addTo(map);
   document.getElementById('base').value = kind;
 }
-document.getElementById('base').onchange = e => setBase(e.target.value);
+document.getElementById('base').onchange = e => {
+  setBase(e.target.value);
+  if (typeof applySwipe === 'function') { applySwipe(); setTimeout(applySwipe, 200); }
+  if (document.getElementById('base').value === 'none' && document.getElementById('swipe').checked) {
+    document.getElementById('tip').textContent = '卷帘需要底图，右侧会空白；可切回影像或关掉卷帘';
+  }
+};
 setBase(qs.get('base') || 'none');
 
 /* ---------- 瓦片 ---------- */
-const tiles = L.tileLayer('xyz_hubei_webp/{z}/{x}/{y}.webp', {
+const TILE_V = 'v3';   // 数据更新时改这个，强制浏览器取新瓦片
+const tiles = L.tileLayer('xyz_hubei_webp/{z}/{x}/{y}.webp?v=' + TILE_V, {
   minZoom: 5, maxZoom: 14, maxNativeZoom: 14,
   attribution: '民國地形圖 · 湖北五萬分一 · 397 幅'
 }).addTo(map);
@@ -223,7 +230,7 @@ function applySwipe() {
   // 用 clip-path 会把子元素整块裁没（实测 Chromium），老式 clip:rect() 正常。
   const sz = map.getSize();
   const x = Math.round(sz.x * swipePct / 100);
-  const H = sz.y + 600;
+  const H = Math.max(sz.y * 2 + 600, 4000);
   const LEFT = 'rect(0px, ' + x + 'px, ' + H + 'px, 0px)';
   const RIGHT = 'rect(0px, ' + sz.x + 'px, ' + H + 'px, ' + x + 'px)';
   if (panes.tile) panes.tile.style.clip = LEFT;
@@ -280,11 +287,13 @@ window.addEventListener('blur', endDrag);
 bar.addEventListener('mousedown', e => e.stopPropagation());
 
 swipeBox.onchange = () => {
-  if (swipeBox.checked) {
-    if (document.getElementById('base').value === 'none') setBase('tdt_img');
-    if (map.getPane('basemapPane').children.length === 0) setBase('tdt_img');
+  if (swipeBox.checked && document.getElementById('base').value === 'none') {
+    setBase('tdt_img');
+    document.getElementById('tip').textContent = '卷帘需要底图，已自动切到天地图影像';
   }
   applySwipe();
+  setTimeout(applySwipe, 120);
+  setTimeout(applySwipe, 400);
 };
 map.on('resize zoomend moveend', applySwipe);
 
@@ -302,3 +311,5 @@ if (qs.get('swipe') === '1' || qs.get('swipe') === 'true') {
 </script>
 </body>
 </html>
+
+
