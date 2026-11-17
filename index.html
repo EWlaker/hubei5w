@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -7,7 +7,10 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   html,body{margin:0;height:100%;font-family:"Microsoft YaHei",system-ui,sans-serif}
-  #map{position:absolute;inset:0;background:#22262c}
+  #map{position:absolute;inset:0;background:#22262c;z-index:1}
+  /* 底图单独一张地图，放在不会被平移的容器里，用裁剪控制露出的宽度 */
+  #wrapB{position:absolute;inset:0;overflow:hidden;z-index:0;pointer-events:none}
+  #mapB{position:absolute;inset:0;background:#22262c}
   .panel{position:absolute;top:12px;left:12px;z-index:1000;background:rgba(255,255,255,.95);
          border-radius:10px;padding:10px 12px;box-shadow:0 2px 12px rgba(0,0,0,.25);font-size:13px;line-height:1.75}
   .panel h1{margin:0 0 4px;font-size:15px;font-weight:700}
@@ -28,14 +31,13 @@
   /* 卷帘 */
   #swipeBar{position:absolute;top:0;bottom:0;width:0;z-index:1200;display:none;pointer-events:none}
   #swipeBar.on{display:block}
-  #swipeBar .hit{position:absolute;top:0;bottom:0;left:-16px;width:32px;pointer-events:auto;
-                 cursor:ew-resize}
+  #swipeBar .hit{position:absolute;top:0;bottom:0;left:-16px;width:32px;pointer-events:auto;cursor:ew-resize}
   #swipeBar .line{position:absolute;top:0;bottom:0;left:-1px;width:3px;background:#e8b64c;
                   box-shadow:0 0 0 1px rgba(0,0,0,.45),0 0 8px rgba(0,0,0,.5)}
   #swipeBar .knob{position:absolute;top:50%;left:-15px;margin-top:-15px;width:30px;height:30px;
-                  border-radius:50%;background:#e8b64c;border:2px solid #fff;
-                  pointer-events:none;box-shadow:0 1px 6px rgba(0,0,0,.5);
-                  display:flex;align-items:center;justify-content:center;font-size:13px;color:#3a2a00}
+                  border-radius:50%;background:#e8b64c;border:2px solid #fff;pointer-events:none;
+                  box-shadow:0 1px 6px rgba(0,0,0,.5);display:flex;align-items:center;
+                  justify-content:center;font-size:13px;color:#3a2a00}
   #swipeBar.dragging .knob{background:#ffd166;transform:scale(1.12)}
   #swipeBar .tag{position:absolute;top:12px;white-space:nowrap;background:rgba(255,255,255,.9);
                  border-radius:4px;padding:2px 7px;font-size:12px;color:#333;pointer-events:none}
@@ -44,10 +46,11 @@
 </style>
 </head>
 <body>
+<div id="wrapB"><div id="mapB"></div></div>
 <div id="map"></div>
 <div class="panel">
   <h1>民國地形圖 · 湖北 五萬分一</h1>
-  <div class="sub">民國時期地形圖 · 5 萬分一 · <b>397 幅</b><br>XYZ 瓦片 · EPSG:3857 · z5–14 全省，z15 仅市驻地（z14 ≈ 8.2 m/px）</div>
+  <div class="sub">民國時期地形圖 · 5 萬分一 · <b>397 幅</b><br>XYZ 瓦片 · EPSG:3857 · z5–14 全省，z15 仅市驻地</div>
   <hr>
   <label>底图 <select id="base">
     <option value="none">无（深色）</option>
@@ -70,24 +73,33 @@
 <script>
 /* ===== 天地图 key：到 https://console.tianditu.gov.cn 免费申请后填这里 ===== */
 const TDT_KEY = '4267820f43926eaf808d61dc07269beb';
-
 const qs = new URLSearchParams(location.search);
+
+/* ---------- 地图 A：历史图 + 接合表 + 经纬网 ---------- */
 const map = L.map('map', {
   center: [parseFloat(qs.get('lat') || 31.0), parseFloat(qs.get('lon') || 112.5)],
-  zoom: parseInt(qs.get('z') || 7)
+  zoom: parseInt(qs.get('z') || 7),
+  zoomControl: false, attributionControl: true
 });
-map.createPane('basemapPane');
-map.getPane('basemapPane').style.zIndex = 150;   // 低于 tilePane(200)，历史地图始终压在上面
 map.createPane('gratPane');
-map.getPane('gratPane').style.zIndex = 350;      // 经纬网压在瓦片之上
+map.getPane('gratPane').style.zIndex = 350;
 
-/* ---------- 底图 ---------- */
+/* ---------- 地图 B：底图（只显示底图，被 wrapB 裁出右半边） ---------- */
+const mapB = L.map('mapB', {
+  center: map.getCenter(), zoom: map.getZoom(),
+  zoomControl: false, attributionControl: false,
+  dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
+  touchZoom: false, boxZoom: false, keyboard: false, tap: false
+});
+mapB.setView(map.getCenter(), map.getZoom(), {animate: false});
+
+/* ---------- 底图（挂在 mapB 上） ---------- */
 function tdt(layer, key) {
   return L.tileLayer(
     'https://t{s}.tianditu.gov.cn/' + key + '/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0' +
     '&LAYER=' + layer + '&STYLE=default&TILEMATRIXSET=w&FORMAT=tiles' +
     '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&tk=' + TDT_KEY,
-    {subdomains: '01234567', maxZoom: 18, pane: 'basemapPane', attribution: '© 天地图'});
+    {subdomains: '01234567', maxZoom: 18, attribution: '© 天地图'});
 }
 const BASEMAPS = {
   none: null,
@@ -95,40 +107,39 @@ const BASEMAPS = {
   tdt_img: () => L.layerGroup([tdt('img', 'img_w'), tdt('cia', 'cia_w')]),
   tdt_ter: () => L.layerGroup([tdt('ter', 'ter_w'), tdt('cta', 'cta_w')]),
   osm: () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-           {maxZoom: 19, pane: 'basemapPane', attribution: '© OpenStreetMap contributors'})
+           {maxZoom: 19, attribution: '© OpenStreetMap contributors'})
 };
-
 let baseLayer = null;
 function setBase(kind) {
-  if (baseLayer) { map.removeLayer(baseLayer); baseLayer = null; }
+  if (baseLayer) { mapB.removeLayer(baseLayer); baseLayer = null; }
+  document.getElementById('base').value = kind;
   if (kind === 'none') return;
   if (kind.startsWith('tdt') && !TDT_KEY) {
     document.getElementById('tip').textContent = '没填天地图 key，已临时用 OSM';
     kind = 'osm';
+    document.getElementById('base').value = 'osm';
   }
   baseLayer = BASEMAPS[kind]();
-  if (baseLayer) baseLayer.addTo(map);
-  document.getElementById('base').value = kind;
+  if (baseLayer) baseLayer.addTo(mapB);
 }
 document.getElementById('base').onchange = e => {
   setBase(e.target.value);
-  if (typeof applySwipe === 'function') { applySwipe(); setTimeout(applySwipe, 200); }
   if (document.getElementById('base').value === 'none' && document.getElementById('swipe').checked) {
     document.getElementById('tip').textContent = '卷帘需要底图，右侧会空白；可切回影像或关掉卷帘';
   }
 };
 setBase(qs.get('base') || 'none');
 
-/* ---------- 瓦片 ---------- */
+/* ---------- 历史图瓦片 ---------- */
 const TILE_V = 'v3';   // 数据更新时改这个，强制浏览器取新瓦片
 const tiles = L.tileLayer('xyz_hubei_webp/{z}/{x}/{y}.webp?v=' + TILE_V, {
-  minZoom: 5, maxZoom: 16, maxNativeZoom: 14,   // z14 以上为拉伸显示
+  minZoom: 5, maxZoom: 16, maxNativeZoom: 14,
   attribution: '民國地形圖 · 湖北五萬分一 · 397 幅'
 }).addTo(map);
 document.getElementById('opa').oninput = e => tiles.setOpacity(e.target.value / 100);
 
 /* ---------- z15：只覆盖 17 个市驻地周边 8 km ---------- */
-const CITY_BOX = [[114.2218,30.5209,114.3888,30.6647],[114.9557,30.1277,115.1221,30.2715],[110.713,32.5573,110.8836,32.7011],[111.2029,30.62,111.3701,30.7638],[112.0593,31.9705,112.2289,32.1143],[114.8073,30.3196,114.9739,30.4634],[112.1155,30.9634,112.2833,31.1072],[113.8328,30.8526,114.0004,30.9964],[112.1551,30.255,112.3217,30.3988],[114.7888,30.3817,114.9556,30.5255],[114.2396,29.7694,114.4054,29.9132],[113.2979,31.6185,113.4669,31.7623],[109.4049,30.2002,109.5713,30.344],[113.3706,30.293,113.5372,30.4368],[112.8159,30.3301,112.9825,30.4739],[113.0825,30.5913,113.2495,30.7351],[110.5905,31.6728,110.7595,31.8166]];   // 17 个市驻地周边 8 km 的经纬框
+const CITY_BOX = [[114.2218,30.5209,114.3888,30.6647],[114.9557,30.1277,115.1221,30.2715],[110.713,32.5573,110.8836,32.7011],[111.2029,30.62,111.3701,30.7638],[112.0593,31.9705,112.2289,32.1143],[114.8073,30.3196,114.9739,30.4634],[112.1155,30.9634,112.2833,31.1072],[113.8328,30.8526,114.0004,30.9964],[112.1551,30.255,112.3217,30.3988],[114.7888,30.3817,114.9556,30.5255],[114.2396,29.7694,114.4054,29.9132],[113.2979,31.6185,113.4669,31.7623],[109.4049,30.2002,109.5713,30.344],[113.3706,30.293,113.5372,30.4368],[112.8159,30.3301,112.9825,30.4739],[113.0825,30.5913,113.2495,30.7351],[110.5905,31.6728,110.7595,31.8166]];
 const BLANK_TILE = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
 const CityLayer = L.TileLayer.extend({
   getTileUrl: function (c) {
@@ -142,7 +153,7 @@ const CityLayer = L.TileLayer.extend({
         return 'xyz_city_z15/' + c.z + '/' + c.x + '/' + c.y + '.webp?v=c1';
       }
     }
-    return BLANK_TILE;     // 城市范围外不发请求，露出下面拉伸的 z14
+    return BLANK_TILE;
   }
 });
 const cityTiles = new CityLayer('', {minZoom: 15, maxZoom: 16, maxNativeZoom: 15,
@@ -158,20 +169,18 @@ function syncCity() {
 /* ---------- 图幅接合表 ---------- */
 const LABEL_MIN_ZOOM = 9;
 let grid = null;
-
 fetch('sheets_index.geojson').then(r => r.json()).then(gj => {
   grid = L.geoJSON(gj, {
     style: () => ({color: '#d9a13b', weight: 1, fill: false, opacity: .8}),
     onEachFeature: (f, ly) => {
       const p = f.properties;
-      ly.bindTooltip('<span class="nm">' + p.n + '</span><br><span class="no">' +
-                     (p.a || '') + '</span>',
+      ly.bindTooltip('<span class="nm">' + p.n + '</span><br><span class="no">' + (p.a || '') + '</span>',
                      {permanent: true, direction: 'center', opacity: 1, className: 'sheetlabel'});
       ly.bindPopup('<b>' + p.n + '</b><br>圖號 ' + (p.a || '—') +
                    '<br><span style="color:#888">行 ' + p['行'] + ' 列 ' + p['列'] + '</span>');
     }
   });
-  if (map.getZoom() >= LABEL_MIN_ZOOM) grid.addTo(map);
+  syncGrid();
 }).catch(e => { document.getElementById('tip').textContent = '接合表加载失败: ' + e; });
 
 function syncGrid() {
@@ -180,37 +189,31 @@ function syncGrid() {
   if (want && !map.hasLayer(grid)) grid.addTo(map);
   if (!want && map.hasLayer(grid)) map.removeLayer(grid);
 }
-map.on('zoomend', syncGrid);
-document.getElementById('lyG').onchange = syncGrid;
 
 /* ---------- 经纬网 ---------- */
 const GRAT_LABEL_MIN_ZOOM = 7;
 let gratLines = null, gratLabels = null;
-
 fetch('graticule.geojson').then(r => r.json()).then(gj => {
   gratLines = L.geoJSON(gj, {
     pane: 'gratPane',
     filter: f => f.geometry.type === 'LineString',
     style: f => f.properties.major
-      ? {color: '#c0392b', weight: 1.1, opacity: .85, dashArray: null}
+      ? {color: '#c0392b', weight: 1.1, opacity: .85}
       : {color: '#e08a7a', weight: .7, opacity: .55, dashArray: '3,4'}
   });
-  const pts = {type: 'FeatureCollection',
-               features: gj.features.filter(f => f.geometry.type === 'Point')};
+  const pts = {type: 'FeatureCollection', features: gj.features.filter(f => f.geometry.type === 'Point')};
   gratLabels = L.geoJSON(pts, {
     pane: 'gratPane',
-    pointToLayer: (f, ll) => L.circleMarker(ll, {
-      radius: 0, opacity: 0, fillOpacity: 0, interactive: true}),
-    onEachFeature: (f, ly) => ly.bindTooltip(f.properties.text, {
-      permanent: true, direction: 'center', opacity: 1, className: 'gratlabel'})
+    pointToLayer: (f, ll) => L.circleMarker(ll, {radius: 0, opacity: 0, fillOpacity: 0}),
+    onEachFeature: (f, ly) => ly.bindTooltip(f.properties.text,
+      {permanent: true, direction: 'center', opacity: 1, className: 'gratlabel'})
   });
-  syncGrid();          // 触发一次显隐同步
+  syncGrat();
 }).catch(e => { document.getElementById('tip').textContent = '经纬网加载失败: ' + e; });
 
 const lyM = document.getElementById('lyM');
 function syncGrat() {
   const on = lyM.checked;
-  [gratLines, gratLabels].forEach(l => { if (!l) return; });
   if (gratLines) {
     if (on && !map.hasLayer(gratLines)) gratLines.addTo(map);
     if (!on && map.hasLayer(gratLines)) map.removeLayer(gratLines);
@@ -221,77 +224,38 @@ function syncGrat() {
     if (!wantLabels && map.hasLayer(gratLabels)) map.removeLayer(gratLabels);
   }
 }
-lyM.onchange = syncGrat;
-map.on('zoomend', syncGrat);
 
-function zoomHint() {
-  const z = map.getZoom();
-  const tip = document.getElementById('tip');
-  if (z >= 15) tip.textContent = 'z' + z + '：仅 17 个市驻地周边 8 km 为 z15 原生，其余为 z14 拉伸';
-  else tip.textContent = '放大到 z9 以上显示图名与图号；白框处 = 本批未收该幅';
+/* ---------- 两图同步 ---------- */
+let syncing = false;
+function syncB() {
+  if (syncing) return;
+  syncing = true;
+  requestAnimationFrame(() => {
+    mapB.setView(map.getCenter(), map.getZoom(), {animate: false});
+    syncing = false;
+  });
 }
-map.on('zoomend', zoomHint);
-map.on('zoomend', syncCity);
-zoomHint();
-syncCity();
-map.on('mousemove', ev => {
-  const p = ev.latlng;
-  document.getElementById('hint').textContent =
-    'N' + p.lat.toFixed(4) + '  E' + p.lon.toFixed(4) + '  ·  z' + map.getZoom();
-});
 
-/* ---------- 卷帘对比 ---------- */
+/* ---------- 卷帘 ---------- */
 const bar = document.getElementById('swipeBar');
-const barLine = bar.querySelector('.line');
-const tilePaneEl = map.getPane('tilePane');
-const basePaneEl = map.getPane('basemapPane');
+const wrapB = document.getElementById('wrapB');
 const swipeBox = document.getElementById('swipe');
 let swipePct = 50;
 
 function applySwipe() {
   const on = swipeBox.checked;
   bar.classList.toggle('on', on);
-  const panes = {
-    tile: tilePaneEl,
-    base: basePaneEl,
-    grid: map.getPane('overlayPane'),
-    label: map.getPane('tooltipPane')
-  };
-  Object.values(panes).forEach(el => {
-    if (!el) return;
-    el.style.clipPath = '';
-    if (!on) { el.style.clip = ''; }
-  });
-  if (!on) return;
-
-  // Leaflet 的 pane 跟随 .leaflet-map-pane 一起平移（拖动时），
-  // 所以裁剪边界必须按 pane 的"当前屏幕位置"反算，否则拖一次就错位。
+  const mapEl = document.getElementById('map');
+  if (!on) {
+    wrapB.style.clipPath = 'none';
+    mapEl.style.clipPath = 'none';
+    return;
+  }
   const sz = map.getSize();
-  const cRect = map.getContainer().getBoundingClientRect();
-  const boundary = cRect.left + sz.x * swipePct / 100;   // 中轴的屏幕 x
-  // pane 盒子给足（窗口变小过再变大时，窄盒子会把画面截断），
-  // 但裁剪的右内边距必须按"盒子宽度"算，不能用地图宽度。
-  const BOX_W = Math.max(sz.x, 4096);
-  const BOX_H = Math.max(sz.y, 4096);
-  Object.values(panes).forEach(el => {
-    if (!el) return;
-    el.style.width = BOX_W + 'px';
-    el.style.height = BOX_H + 'px';
-    el.style.clip = '';
-    el.style.clipPath = '';
-  });
-  const clipFor = (el, keepLeft) => {
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const w = Math.max(0, Math.min(BOX_W, boundary - r.left));
-    el.style.clipPath = keepLeft
-      ? 'inset(0px ' + (BOX_W - w) + 'px 0px 0px)'
-      : 'inset(0px 0px 0px ' + w + 'px)';
-  };
-  clipFor(panes.tile, true);
-  clipFor(panes.grid, true);
-  clipFor(panes.label, true);
-  clipFor(panes.base, false);
+  const x = Math.round(sz.x * swipePct / 100);
+  // 两张图各自裁一半：容器都是静止的，不随地图平移，天然不会错位
+  wrapB.style.clipPath = 'inset(0px 0px 0px ' + x + 'px)';
+  mapEl.style.clipPath = 'inset(0px ' + (sz.x - x) + 'px 0px 0px)';
   bar.style.left = swipePct + '%';
 }
 
@@ -302,12 +266,11 @@ function setSwipePct(clientX) {
 }
 
 let dragging = false;
-
 function startDrag(e) {
   if (!swipeBox.checked) return;
   dragging = true;
   bar.classList.add('dragging');
-  map.dragging.disable();                 // 拖卷帘时别让地图跟着平移
+  map.dragging.disable();
   document.body.style.cursor = 'ew-resize';
   moveDrag(e);
   if (e.cancelable) e.preventDefault();
@@ -315,7 +278,7 @@ function startDrag(e) {
 }
 function moveDrag(e) {
   if (!dragging) return;
-  if (e.buttons === 0 && !e.touches) { endDrag(); return; }   // 在窗口外松开也要收尾
+  if (e.buttons === 0 && !e.touches) { endDrag(); return; }
   const t = e.touches ? e.touches[0] : e;
   if (!t) return;
   setSwipePct(t.clientX);
@@ -328,7 +291,6 @@ function endDrag() {
   map.dragging.enable();
   document.body.style.cursor = '';
 }
-
 const hit = bar.querySelector('.hit');
 hit.addEventListener('mousedown', startDrag);
 hit.addEventListener('touchstart', startDrag, {passive: false});
@@ -339,7 +301,6 @@ window.addEventListener('mouseup', endDrag);
 window.addEventListener('touchend', endDrag);
 window.addEventListener('touchcancel', endDrag);
 window.addEventListener('blur', endDrag);
-bar.addEventListener('mousedown', e => e.stopPropagation());
 
 swipeBox.onchange = () => {
   if (swipeBox.checked && document.getElementById('base').value === 'none') {
@@ -347,41 +308,43 @@ swipeBox.onchange = () => {
     document.getElementById('tip').textContent = '卷帘需要底图，已自动切到天地图影像';
   }
   applySwipe();
-  setTimeout(applySwipe, 120);
-  setTimeout(applySwipe, 400);
 };
-map.on('resize zoomend moveend move', applySwipe);
-window.addEventListener('resize', () => { map.invalidateSize(); applySwipe(); });
-setInterval(() => { if (swipeBox.checked) applySwipe(); }, 500);
 
-/* ===== 调试面板：?debug=1 ===== */
-if (qs.get('debug') === '1') {
-  const box = document.createElement('div');
-  box.style.cssText = 'position:absolute;right:8px;top:8px;z-index:99999;background:rgba(0,0,0,.85);' +
-    'color:#0f0;font:12px/1.5 monospace;padding:8px 10px;border-radius:6px;white-space:pre;max-width:46vw';
-  document.body.appendChild(box);
-  setInterval(() => {
-    const sz = map.getSize();
-    const r = map.getContainer().getBoundingClientRect();
-    const panes = ['tilePane', 'basemapPane', 'overlayPane', 'tooltipPane'];
-    const lines = [
-      'win ' + innerWidth + 'x' + innerHeight + '  dpr ' + devicePixelRatio,
-      'mapSize ' + sz.x + 'x' + sz.y + '  rect ' + Math.round(r.left) + ',' + Math.round(r.top) +
-        ' ' + Math.round(r.width) + 'x' + Math.round(r.height),
-      'zoom ' + map.getZoom() + '  swipe ' + (document.getElementById('swipe').checked ? 'on' : 'off') +
-        '  pct ' + Math.round(swipePct)
-    ];
-    panes.forEach(p => {
-      const el = map.getPane(p);
-      if (!el) { lines.push(p + ' -'); return; }
-      const pr = el.getBoundingClientRect();
-      lines.push(p + ' ' + Math.round(pr.width) + 'x' + Math.round(pr.height) +
-        ' @' + Math.round(pr.top) + '  clip=' + (el.style.clipPath || 'none'));
-    });
-    box.textContent = lines.join('\n');
-  }, 800);
+/* ---------- 事件 ---------- */
+map.on('move', syncB);
+map.on('zoomend', () => {
+  syncB();
+  syncGrid();
+  syncGrat();
+  syncCity();
+  zoomHint();
+  applySwipe();
+});
+map.on('moveend zoomend', applySwipe);
+document.getElementById('lyG').onchange = syncGrid;
+lyM.onchange = syncGrat;
+
+function zoomHint() {
+  const z = map.getZoom();
+  const tip = document.getElementById('tip');
+  if (z >= 15) tip.textContent = 'z' + z + '：仅 17 个市驻地周边 8 km 为 z15 原生，其余为 z14 拉伸';
+  else tip.textContent = '放大到 z9 以上显示图名与图号；白框处 = 本批未收该幅';
 }
-/* URL 参数：?swipe=1&pos=40 直接进卷帘；?base=tdt_img 指定底图 */
+
+window.addEventListener('resize', () => {
+  map.invalidateSize();
+  mapB.invalidateSize();
+  syncB();
+  applySwipe();
+});
+
+map.on('mousemove', ev => {
+  const p = ev.latlng;
+  document.getElementById('hint').textContent =
+    'N' + p.lat.toFixed(4) + '  E' + p.lon.toFixed(4) + '  ·  z' + map.getZoom();
+});
+
+/* URL 参数：?swipe=1&pos=40 */
 if (qs.get('swipe') === '1' || qs.get('swipe') === 'true') {
   swipeBox.checked = true;
   if (qs.get('pos')) {
@@ -389,18 +352,28 @@ if (qs.get('swipe') === '1' || qs.get('swipe') === 'true') {
     if (isFinite(v)) swipePct = Math.min(98, Math.max(2, v));
   }
   if (document.getElementById('base').value === 'none') setBase('tdt_img');
-  applySwipe();
 }
+syncGrid(); syncGrat(); syncCity(); zoomHint(); applySwipe();
 
+/* ===== 调试面板：?debug=1 ===== */
+if (qs.get('debug') === '1') {
+  const box = document.createElement('div');
+  box.style.cssText = 'position:absolute;right:8px;top:8px;z-index:99999;background:rgba(0,0,0,.85);' +
+    'color:#0f0;font:12px/1.5 monospace;padding:8px 10px;border-radius:6px;white-space:pre';
+  document.body.appendChild(box);
+  setInterval(() => {
+    const a = map.getSize(), b = mapB.getSize();
+    box.textContent = [
+      'win ' + innerWidth + 'x' + innerHeight + '  dpr ' + devicePixelRatio,
+      'mapA ' + a.x + 'x' + a.y + '  mapB ' + b.x + 'x' + b.y,
+      'zoomA ' + map.getZoom() + '  zoomB ' + mapB.getZoom() +
+        '  Δcenter ' + (map.getCenter().distanceTo(mapB.getCenter())).toFixed(1) + ' m',
+      'swipe ' + (swipeBox.checked ? 'on' : 'off') + '  pct ' + Math.round(swipePct) +
+        '  clipB=' + (wrapB.style.clipPath || 'none')
+    ].join('\n');
+  }, 800);
+}
 </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
 
